@@ -1,0 +1,35 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.2.32616.157
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TestArcgis.Android", "TestArcgis.Android\TestArcgis.Android.csproj", "{B49522DE-0DDC-4D81-B36A-AF4708978CE8}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TestArcgis", "TestArcgis\TestArcgis.csproj", "{084C84B4-FA08-405A-AF2B-CB16A0E81151}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{B49522DE-0DDC-4D81-B36A-AF4708978CE8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B49522DE-0DDC-4D81-B36A-AF4708978CE8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B49522DE-0DDC-4D81-B36A-AF4708978CE8}.Debug|Any CPU.Deploy.0 = Debug|Any CPU
+		{B49522DE-0DDC-4D81-B36A-AF4708978CE8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B49522DE-0DDC-4D81-B36A-AF4708978CE8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B49522DE-0DDC-4D81-B36A-AF4708978CE8}.Release|Any CPU.Deploy.0 = Release|Any CPU
+		{084C84B4-FA08-405A-AF2B-CB16A0E81151}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{084C84B4-FA08-405A-AF2B-CB16A0E81151}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{084C84B4-FA08-405A-AF2B-CB16A0E81151}.Debug|Any CPU.Deploy.0 = Debug|Any CPU
+		{084C84B4-FA08-405A-AF2B-CB16A0E81151}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{084C84B4-FA08-405A-AF2B-CB16A0E81151}.Release|Any CPU.Build.0 = Release|Any CPU
+		{084C84B4-FA08-405A-AF2B-CB16A0E81151}.Release|Any CPU.Deploy.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {5D923981-1FFD-4EEB-9A98-0BE371F13D4B}
+	EndGlobalSection
+EndGlobal
