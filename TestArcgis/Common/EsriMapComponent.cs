@@ -8,6 +8,7 @@ namespace TestArcgis.Common
 {
     public class EsriMapComponent
     {
+        private readonly int mReRoutedTimeLimit = 15;
         private readonly int mGPSEPSG = 4326;
         private readonly string mLocateURI = "https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer";
         private readonly string mVWorldURI = "http://api.vworld.kr/req/wmts/1.0.0/CCED653C-0097-3563-AF9D-38EF084E13D8/WMTSCapabilities.xml";
@@ -18,8 +19,8 @@ namespace TestArcgis.Common
         private Esri.ArcGISRuntime.UI.GraphicsOverlayCollection mGraphicsOverlayCollection;
         //Grapic
         private Esri.ArcGISRuntime.UI.Graphic mRouteAheadGraphic;
-        private Esri.ArcGISRuntime.UI.Graphic mCurrentPositionGraphic;
         private Esri.ArcGISRuntime.UI.Graphic mRouteTraveledGraphic;
+        private Esri.ArcGISRuntime.UI.Graphic mRoutedEndGraphic;
         //Routed
         private readonly Uri mRoutingURI = new Uri("https://route-api.arcgis.com/arcgis/rest/services/World/Route/NAServer/Route_World");
         private Esri.ArcGISRuntime.Tasks.NetworkAnalysis.RouteTask mRouteTask;
@@ -27,10 +28,19 @@ namespace TestArcgis.Common
         private Esri.ArcGISRuntime.Tasks.NetworkAnalysis.RouteResult mRouteResult;
         private Esri.ArcGISRuntime.Tasks.NetworkAnalysis.Route mRouted;
         private Esri.ArcGISRuntime.Navigation.RouteTracker mRouteTracker;
-
+        private IReadOnlyList<Esri.ArcGISRuntime.Tasks.NetworkAnalysis.DirectionManeuver> mDirectionsList;
+        private Action<int> mReRoutedCallback = null;
         private bool mRoutedFlag = false;
+        private bool mReRoutedSupported = false;
+        private bool mIsOnRouted = true;
+        private int mReRoutedCount = 0;
 
-        public EsriMapComponent(bool pLocator = false,bool pRouted = false)
+
+        private bool mAutoLocateFlag = false;
+        private Esri.ArcGISRuntime.Geometry.MapPoint mLastMapPosition = null;
+        private Esri.ArcGISRuntime.Geometry.MapPoint mLastDestinationMapPosition = null;
+
+        public EsriMapComponent(bool pRouted = false)
         {
             mEsriMapview = new Esri.ArcGISRuntime.Xamarin.Forms.MapView();
             mGraphicsOverlayCollection = new Esri.ArcGISRuntime.UI.GraphicsOverlayCollection
@@ -39,10 +49,6 @@ namespace TestArcgis.Common
             };
             mEsriMapview.GraphicsOverlays = mGraphicsOverlayCollection;
             mRoutedFlag = pRouted;
-            if (pRouted)
-            {
-                InitRouted();
-            }
         }
 
         public Esri.ArcGISRuntime.Xamarin.Forms.MapView GetMapView()
@@ -57,11 +63,25 @@ namespace TestArcgis.Common
             await _WmtsLayer.LoadAsync();
             _Map.OperationalLayers.Add(_WmtsLayer);
             mEsriMapview.Map = _Map;
+
+            if (mRoutedFlag)
+            {
+                InitRouted();
+            }
+            else
+            {
+                InitLocate();
+            }
         }
         public async void SetMapViewpointCenterAsync(double pLatitude, double pLogitude)
         {
             Esri.ArcGISRuntime.Geometry.MapPoint mapCenterPoint = new Esri.ArcGISRuntime.Geometry.MapPoint(pLogitude, pLatitude, Esri.ArcGISRuntime.Geometry.SpatialReferences.Wgs84);
             await mEsriMapview.SetViewpointCenterAsync(pLatitude, pLogitude);
+        }
+
+        public async void SetMapViewpointCenterAsync(Esri.ArcGISRuntime.Geometry.MapPoint pMapPoint)
+        {
+            await mEsriMapview.SetViewpointCenterAsync(pMapPoint);
         }
         public void SetMapViewMapPosition(double pLatitude, double pLogitude, double pScale)
         {
@@ -85,6 +105,36 @@ namespace TestArcgis.Common
 
             return _Destination;
         }
+
+        public Esri.ArcGISRuntime.Geometry.MapPoint GetWgs84MapPoint(double pLatitude, double pLogitude)
+        {
+            return new Esri.ArcGISRuntime.Geometry.MapPoint(pLogitude, pLatitude, Esri.ArcGISRuntime.Geometry.SpatialReferences.Wgs84);
+        }
+
+        private void InitLocate()
+        {
+            mEsriMapview.LocationDisplay.IsEnabled = true;
+            mEsriMapview.LocationDisplay.AutoPanMode = Esri.ArcGISRuntime.UI.LocationDisplayAutoPanMode.Recenter;
+            mEsriMapview.LocationDisplay.LocationChanged += LocationDisplay_LocationChanged;
+            mEsriMapview.LocationDisplay.DataSource = Esri.ArcGISRuntime.Location.LocationDataSource.CreateDefault();
+            Xamarin.Essentials.MainThread.BeginInvokeOnMainThread(() =>
+            {
+                mEsriMapview.LocationDisplay.DataSource.StartAsync();
+            });
+
+            Xamarin.Forms.Device.StartTimer(TimeSpan.FromSeconds(1), () =>
+            {
+                if (mLastMapPosition != null)
+                {
+                    if (mAutoLocateFlag)
+                    {
+                        SetMapViewpointCenterAsync(mLastMapPosition);
+                    }
+                }
+                return true;
+            });
+        }
+
         private async void InitRouted()
         {
             mRouteTask = await Esri.ArcGISRuntime.Tasks.NetworkAnalysis.RouteTask.CreateAsync(mRoutingURI);
@@ -94,76 +144,263 @@ namespace TestArcgis.Common
             mRouteParams.ReturnStops = true;
             mRouteParams.ReturnRoutes = true;
             mRouteParams.OutputSpatialReference = Esri.ArcGISRuntime.Geometry.SpatialReferences.Wgs84;
+
+            Xamarin.Forms.Device.StartTimer(TimeSpan.FromSeconds(1), () =>
+            {
+                if(mIsOnRouted)
+                {
+                    mReRoutedCount = 0;
+                }
+                else
+                {
+                    mReRoutedCount++;
+                    mReRoutedCallback(mReRoutedCount);
+                }
+
+                if(mReRoutedCount >= mReRoutedTimeLimit)
+                {
+                    mIsOnRouted = true;
+                    mReRoutedCallback(100);
+                }
+                return true;
+            });
         }
 
-        public async void RoutedAddress(Esri.ArcGISRuntime.Geometry.MapPoint pSource, Esri.ArcGISRuntime.Geometry.MapPoint pDestination)
+        public void SetAutoLocated(bool pAutoLocateFlag)
         {
-            Esri.ArcGISRuntime.UI.GraphicsOverlay _GrapicOverlay = this.mGraphicsOverlayCollection.FirstOrDefault();
-            List<Esri.ArcGISRuntime.Tasks.NetworkAnalysis.Stop> stopPoints = new List<Esri.ArcGISRuntime.Tasks.NetworkAnalysis.Stop>();
+            mAutoLocateFlag = pAutoLocateFlag;
+        }
 
+        private void LocationDisplay_LocationChanged(object sender, Esri.ArcGISRuntime.Location.Location e)
+        {
+            mLastMapPosition = e.Position;
+        }
+
+        public void GetReRoutedCallBack(Action<int> pReRoutedCallBack)
+        {
+            mReRoutedCallback = pReRoutedCallBack;
+        }
+
+        public void RoutedAddress(Esri.ArcGISRuntime.Geometry.MapPoint pDestination, Esri.ArcGISRuntime.Geometry.MapPoint pSource, Action<string> pCatchCallback)
+        {
+            mLastDestinationMapPosition = pDestination;
+
+            DisableRoutedProcess();
+            List<Esri.ArcGISRuntime.Tasks.NetworkAnalysis.Stop> stopPoints = new List<Esri.ArcGISRuntime.Tasks.NetworkAnalysis.Stop>();
             stopPoints.Add(new Esri.ArcGISRuntime.Tasks.NetworkAnalysis.Stop(pSource));
             stopPoints.Add(new Esri.ArcGISRuntime.Tasks.NetworkAnalysis.Stop(pDestination));
+            RoutedProcess(stopPoints,pDestination, pCatchCallback);
+        }
 
-            mRouteParams.ClearStops();
-            mRouteParams.SetStops(stopPoints);
-            mRouteResult = await mRouteTask.SolveRouteAsync(mRouteParams);
-            mRouted = mRouteResult.Routes[0];
-
-            mRouteAheadGraphic = new Esri.ArcGISRuntime.UI.Graphic(mRouted.RouteGeometry)
+        private void DisableRoutedProcess()
+        {
+            try
             {
-                Symbol = new Esri.ArcGISRuntime.Symbology.SimpleLineSymbol(
-                    Esri.ArcGISRuntime.Symbology.SimpleLineSymbolStyle.Dash,
-                Color.BlueViolet, 5)
-            };
+                mIsOnRouted = true;
+                Xamarin.Essentials.MainThread.BeginInvokeOnMainThread(() =>
+                {
+                    Esri.ArcGISRuntime.UI.GraphicsOverlay _GrapicOverlay = this.mGraphicsOverlayCollection.FirstOrDefault();
+                    if (mEsriMapview.LocationDisplay.IsEnabled)
+                    {
+                        mEsriMapview.LocationDisplay.DataSource.StopAsync();
+                        mEsriMapview.LocationDisplay.IsEnabled = false;
+                    }
 
-            mRouteTraveledGraphic = new Esri.ArcGISRuntime.UI.Graphic
+                    if(mRouteAheadGraphic != null)
+                    {
+                        _GrapicOverlay.Graphics.Remove(mRouteAheadGraphic);
+                    }
+                    if (mRouteTraveledGraphic != null)
+                    {
+                        _GrapicOverlay.Graphics.Remove(mRouteTraveledGraphic);
+                    }
+                    if (mRoutedEndGraphic != null)
+                    {
+                        _GrapicOverlay.Graphics.Remove(mRoutedEndGraphic);
+                    }
+                });
+
+                if (mRouteTracker != null)
+                {
+                    mRouteTracker.TrackingStatusChanged -= MRouteTracker_TrackingStatusChanged;
+                    mRouteTracker.RerouteStarted -= MRouteTracker_RerouteStarted;
+                    mRouteTracker.RerouteCompleted -= MRouteTracker_RerouteCompleted;
+                    mRouteTracker = null;
+                }
+                mRouteParams.ClearStops();
+            }
+            catch
             {
-                Symbol = new Esri.ArcGISRuntime.Symbology.SimpleLineSymbol(
-                    Esri.ArcGISRuntime.Symbology.SimpleLineSymbolStyle.Solid,
-                    Color.LightBlue, 3)
-            };
 
-            _GrapicOverlay.Graphics.Add(mRouteAheadGraphic);
-            _GrapicOverlay.Graphics.Add(mRouteTraveledGraphic);
+            }
+        }
 
-            mRouteTracker = new Esri.ArcGISRuntime.Navigation.RouteTracker(mRouteResult, 0, true);
+
+        private async void RoutedProcess(List<Esri.ArcGISRuntime.Tasks.NetworkAnalysis.Stop> pStopList, Esri.ArcGISRuntime.Geometry.MapPoint pDestination, Action<string> pCatchCallback)
+        {
+            try
+            {
+                if (mReRoutedCallback != null)
+                {
+                    mReRoutedCallback(-2);
+                }
+                Esri.ArcGISRuntime.UI.GraphicsOverlay _GrapicOverlay = this.mGraphicsOverlayCollection.FirstOrDefault();
+                mRouteParams.ClearStops();
+                mRouteParams.SetStops(pStopList);
+                mRouteResult = await mRouteTask.SolveRouteAsync(mRouteParams);
+                mRouted = mRouteResult.Routes[0];
+
+                mRouteAheadGraphic = new Esri.ArcGISRuntime.UI.Graphic(mRouted.RouteGeometry)
+                {
+                    Symbol = new Esri.ArcGISRuntime.Symbology.SimpleLineSymbol(
+                        Esri.ArcGISRuntime.Symbology.SimpleLineSymbolStyle.Dash,
+                    Color.BlueViolet, 5)
+                };
+
+                mRouteTraveledGraphic = new Esri.ArcGISRuntime.UI.Graphic
+                {
+                    Symbol = new Esri.ArcGISRuntime.Symbology.SimpleLineSymbol(
+                        Esri.ArcGISRuntime.Symbology.SimpleLineSymbolStyle.Solid,
+                        Color.LightBlue, 3)
+                };
+
+                mRoutedEndGraphic = new Esri.ArcGISRuntime.UI.Graphic
+                {
+                    Geometry = pDestination,
+                    Symbol = new Esri.ArcGISRuntime.Symbology.SimpleMarkerSymbol(Esri.ArcGISRuntime.Symbology.SimpleMarkerSymbolStyle.Square, Color.Red, 20),
+                };
+
+                _GrapicOverlay.Graphics.Add(mRouteAheadGraphic);
+                _GrapicOverlay.Graphics.Add(mRouteTraveledGraphic);
+                _GrapicOverlay.Graphics.Add(mRoutedEndGraphic);
+
+                await mEsriMapview.SetViewpointGeometryAsync(mRouted.RouteGeometry, 100);
+
+                mDirectionsList = mRouted.DirectionManeuvers;
+                mRouteTracker = new Esri.ArcGISRuntime.Navigation.RouteTracker(mRouteResult, 0, true);
+                mRouteTracker.TrackingStatusChanged += MRouteTracker_TrackingStatusChanged;
+
+                if (mRouteTask.RouteTaskInfo.SupportsRerouting)
+                {
+                    mReRoutedSupported = true;
+                    await mRouteTracker.EnableReroutingAsync(new Esri.ArcGISRuntime.Navigation.ReroutingParameters(mRouteTask, mRouteParams)
+                    {
+                        Strategy = Esri.ArcGISRuntime.Navigation.ReroutingStrategy.ToNextWaypoint,
+                        VisitFirstStopOnStart = false
+                    });
+
+                    mRouteTracker.RerouteStarted += MRouteTracker_RerouteStarted;
+                    mRouteTracker.RerouteCompleted += MRouteTracker_RerouteCompleted;
+                }
+                else
+                {
+                    pCatchCallback("Do not SupportsRerouting! Because ReRouted Service only works on local dataset.");
+                }
+                mEsriMapview.LocationDisplay.AutoPanMode = Esri.ArcGISRuntime.UI.LocationDisplayAutoPanMode.Navigation;
+                mEsriMapview.LocationDisplay.DataSource = new RouteTrackerDisplayLocationDataSource(Esri.ArcGISRuntime.Location.LocationDataSource.CreateDefault(), mRouteTracker);
+                mEsriMapview.LocationDisplay.IsEnabled = true;
+            }
+            catch(Exception ets)
+            {
+                pCatchCallback(ets.Message);
+            }
+            finally
+            {
+                if (mReRoutedCallback != null)
+                {
+                    mReRoutedCallback(-1);
+                }
+            }
+        }
+
+        private void MRouteTracker_RerouteStarted(object sender, EventArgs e)
+        {
+            if (mReRoutedCallback != null)
+            {
+                mReRoutedCallback(-2);
+            }
+            mRouteTracker.TrackingStatusChanged -= MRouteTracker_TrackingStatusChanged;
+        }
+
+        private void MRouteTracker_RerouteCompleted(object sender, Esri.ArcGISRuntime.Navigation.RouteTrackerRerouteCompletedEventArgs e)
+        {
+            if (mReRoutedCallback != null)
+            {
+                mReRoutedCallback(-1);
+            }
+            mDirectionsList = e.TrackingStatus.RouteResult.Routes[0].DirectionManeuvers;
             mRouteTracker.TrackingStatusChanged += MRouteTracker_TrackingStatusChanged;
-            mEsriMapview.LocationDisplay.AutoPanMode = Esri.ArcGISRuntime.UI.LocationDisplayAutoPanMode.Navigation;
-
-            mEsriMapview.LocationDisplay.DataSource = new RouteTrackerDisplayLocationDataSource(Esri.ArcGISRuntime.Location.LocationDataSource.CreateDefault(), mRouteTracker);
-            mEsriMapview.LocationDisplay.IsEnabled = true;
         }
 
         private void MRouteTracker_TrackingStatusChanged(object sender, Esri.ArcGISRuntime.Navigation.RouteTrackerTrackingStatusChangedEventArgs e)
         {
             Esri.ArcGISRuntime.Navigation.TrackingStatus status = e.TrackingStatus;
 
-            if (status.DestinationStatus == Esri.ArcGISRuntime.Navigation.DestinationStatus.NotReached || status.DestinationStatus == Esri.ArcGISRuntime.Navigation.DestinationStatus.Approaching)
+            if(mReRoutedSupported)
             {
-                mRouteAheadGraphic.Geometry = status.RouteProgress.RemainingGeometry;
-                mRouteTraveledGraphic.Geometry = status.RouteProgress.TraversedGeometry;
-            }
-            else if (status.DestinationStatus == Esri.ArcGISRuntime.Navigation.DestinationStatus.Reached)
-            {
-                mRouteAheadGraphic.Geometry = null;
-                mRouteTraveledGraphic.Geometry = status.RouteResult.Routes[0].RouteGeometry;
-
-                if (status.RemainingDestinationCount > 1)
+                if (status.IsOnRoute && !status.IsRouteCalculating)
                 {
-                    mRouteTracker.SwitchToNextDestinationAsync();
+                    if (status.DestinationStatus == Esri.ArcGISRuntime.Navigation.DestinationStatus.NotReached || status.DestinationStatus == Esri.ArcGISRuntime.Navigation.DestinationStatus.Approaching)
+                    {
+                        mRouteAheadGraphic.Geometry = status.RouteProgress.RemainingGeometry;
+                        mRouteTraveledGraphic.Geometry = status.RouteProgress.TraversedGeometry;
+                    }
+                    else if (status.DestinationStatus == Esri.ArcGISRuntime.Navigation.DestinationStatus.Reached)
+                    {
+                        mRouteAheadGraphic.Geometry = null;
+                        mRoutedEndGraphic.Geometry = null;
+                        mRouteTraveledGraphic.Geometry = status.RouteResult.Routes[0].RouteGeometry;
+
+                        if (status.RemainingDestinationCount > 1)
+                        {
+                            mRouteTracker.SwitchToNextDestinationAsync();
+                        }
+                        else
+                        {
+                            Xamarin.Essentials.MainThread.BeginInvokeOnMainThread(() =>
+                            {
+                                mEsriMapview.LocationDisplay.DataSource.StopAsync();
+                            });
+                        }
+
+                    }
+                }
+            }
+            else
+            {
+                if(status.IsOnRoute)
+                {
+                    mIsOnRouted = true;
+                    if (status.DestinationStatus == Esri.ArcGISRuntime.Navigation.DestinationStatus.NotReached || status.DestinationStatus == Esri.ArcGISRuntime.Navigation.DestinationStatus.Approaching)
+                    {
+                        mRouteAheadGraphic.Geometry = status.RouteProgress.RemainingGeometry;
+                        mRouteTraveledGraphic.Geometry = status.RouteProgress.TraversedGeometry;
+                    }
+                    else if (status.DestinationStatus == Esri.ArcGISRuntime.Navigation.DestinationStatus.Reached)
+                    {
+                        mRouteAheadGraphic.Geometry = null;
+                        mRoutedEndGraphic.Geometry = null;
+                        mRouteTraveledGraphic.Geometry = status.RouteResult.Routes[0].RouteGeometry;
+
+                        if (status.RemainingDestinationCount > 1)
+                        {
+                            mRouteTracker.SwitchToNextDestinationAsync();
+                        }
+                        else
+                        {
+                            Xamarin.Essentials.MainThread.BeginInvokeOnMainThread(() =>
+                            {
+                                mEsriMapview.LocationDisplay.DataSource.StopAsync();
+                            });
+                        }
+                    }
                 }
                 else
                 {
-
-                    Xamarin.Essentials.MainThread.BeginInvokeOnMainThread(() =>
-                    {
-                        mEsriMapview.LocationDisplay.DataSource.StopAsync();
-                    });
+                    mIsOnRouted = false;
                 }
-
             }
         }
-
     }
     public class RouteTrackerDisplayLocationDataSource : Esri.ArcGISRuntime.Location.LocationDataSource
     {
@@ -189,9 +426,6 @@ namespace TestArcgis.Common
         {
             // Update the tracker location with the new location from the source (simulation or GPS).
             _routeTracker.TrackLocationAsync(e);
-
-            var tttss = Esri.ArcGISRuntime.Location.LocationDataSource.CreateDefault();
-
         }
 
         private void TrackingStatusChanged(object sender, Esri.ArcGISRuntime.Navigation.RouteTrackerTrackingStatusChangedEventArgs e)
