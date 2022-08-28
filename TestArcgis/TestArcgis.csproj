@@ -14,5 +14,15 @@
     <PackageReference Include="Esri.ArcGISRuntime.Xamarin.Forms" Version="100.15.0" />
     <PackageReference Include="Xamarin.Forms" Version="5.0.0.2515" />
     <PackageReference Include="Xamarin.Essentials" Version="1.7.3" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Remove="shellpage\" />
+    <None Remove="Model\" />
+    <None Remove="Newtonsoft.Json" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="shellpage\" />
+    <Folder Include="Model\" />
   </ItemGroup>
 </Project>

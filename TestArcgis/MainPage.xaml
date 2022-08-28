@@ -1,15 +1,7 @@
 ﻿<?xml version="1.0" encoding="utf-8" ?>
-<ContentPage xmlns="http://xamarin.com/schemas/2014/forms"
+<Shell xmlns="http://xamarin.com/schemas/2014/forms"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              x:Class="TestArcgis.MainPage">
-    <Grid>
-        <Grid.RowDefinitions>
-            <RowDefinition Height="*"/>
-            <RowDefinition Height="auto"/>
-        </Grid.RowDefinitions>
-        <Grid x:Name="xGrid"/>
-        <Label HorizontalOptions="End" VerticalOptions="End" Margin="10" FontAttributes="Bold" x:Name="xReRoutedTimeLabel"/>
-        <ActivityIndicator x:Name="xBusyIndicator" HorizontalOptions="Center" VerticalOptions="Center"/>
-        <Button Grid.Row="1" Text="click" Clicked="Button_Clicked"/>
-    </Grid>
-</ContentPage>
+    <ShellContent Title="Test Page 1" x:Name="xTestPage1ShellContent"/>
+    <ShellContent Title="Test Page 2" x:Name="xTestPage2ShellContent"/>
+</Shell>
